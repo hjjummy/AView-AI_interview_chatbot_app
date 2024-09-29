@@ -1,1 +1,1 @@
-# marine-accident_generative_AI
+# generative_AI
