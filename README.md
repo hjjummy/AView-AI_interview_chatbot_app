@@ -4,5 +4,5 @@
 NLP + LLM 스터디 (RNN,LSTM,Transformer,BERT,T5,GPT,Langchain,RAG,REACT,Retrieval)
 
 프로젝트 참여멤버
-[성신여자대학교] - 유시연, 전지연, 정현정, 홍진화
+[성신여자대학교] - 유시연, 전지연, 정현정
 
