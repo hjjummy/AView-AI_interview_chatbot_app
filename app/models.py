@@ -46,7 +46,7 @@ class interview(db.Model):
     # self_introduction과의 idIntro 연결
     intro_id = db.Column(db.Integer, db.ForeignKey('self_introduction.idIntro', ondelete='CASCADE'), nullable=False)  # 외래 키
     # self_introduction과의 관계 설정 - self_introduction과의 1개에 여러 interview가 있음 -> self_introduction객체.idIntro으로 self_introduction의 면접 참조
-    self_introduction = db.relationship("self_introduction", backref=db.backref('Interviews', cascade='all, delete-orphan'))
+    #self_introduction = db.relationship("self_introduction", backref=db.backref('Interviews', cascade='all, delete-orphan'))
     # cascade='all, delete-orphan' -> 자소서 삭제할 때 면접 기록도 삭제됨
 
     ip = db.Column(IPAddressType)
