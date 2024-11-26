@@ -42,7 +42,10 @@ def register():
         return jsonify({"error": "Email already registered"}), 400
 
     # 비밀번호 해싱 후 저장
-    hashed_password = generate_password_hash(password, method='sha256')
+    # 비밀번호 해싱 (수정된 부분)
+    hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
+
+    # 새로운 사용자 생성 및 저장
     new_user = User(name=name, email=email, password=hashed_password)
     db.session.add(new_user)
     db.session.commit()
