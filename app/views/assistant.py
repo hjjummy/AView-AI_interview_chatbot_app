@@ -1,18 +1,16 @@
 import io
-from flask import Blueprint, Flask, request, jsonify, send_file, url_for, session
-import requests
-import os
+from datetime import datetime
+from flask import Blueprint, Flask, request, jsonify, send_file, session, redirect
+
 from openai import OpenAI
 from dotenv import load_dotenv
 from flask_cors import CORS
 import time
 from pathlib import Path
 
-# from flask_restx import Api, Resource
-# Api 구현을 위한 Api 객체 import
-
-
-# from .utils import token_required
+import os
+import logging
+import requests
 
 # .env 파일에서 환경 변수 로드
 load_dotenv()
@@ -24,8 +22,7 @@ TTS_API_URL = "https://api.openai.com/v1/audio/generate"
 
 app = Flask(__name__)
 app.secret_key = "your_secret_key"  # 세션 암호화 키
-# 세션 사용 없이 interview의 db에 assistant와 thread id를 저장하는 방법도 있음
-
+# 세션 사용 없이 interview의 db에 assistant와 thread id를 저장하는 방법도
 
 # CORS 설정 (필요시 origins를 특정 도메인으로 제한 가능)
 CORS(app)
@@ -33,28 +30,34 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({
-        "message": "Welcome to the API. Available endpoints: /send_resume"
-    })
-
+    return redirect('/send_resume')
 
 # OpenAI API 호출을 위한 엔드포인트
 @app.route('/send_resume', methods=['POST'])
 # @token_required
 def send_message_init():
+    if request.method == 'POST':
+        print("POST request received")
+
     data = request.form
     if not data:
         return jsonify({"error": "request is required"}), 400
+    else:
+        print("good")
 
-    file = request.files.get('resume')  # form-data로 첨부된 파일
+    file = request.files.get('resume')
+
+    if 'resume' not in request.files:
+        return jsonify({"error": "No selected file"}), 400
 
     # 파일을 서버에 저장하거나 처리
-    file_path = os.path.join("D:/aiview_flask/projects/myproject/uploads", file.filename)
+    file_path = os.path.join(r"D:\aiview_flask\projects\myproject\uploads", file.filename)
     print(file_path)
     file.save(file_path)
 
     gender = data.get('gender')
     age = data.get('age')
+
     instruction = f"""업로드된 자기소개서의 내용을 기반으로 엄격한 압박 면접을 진행하는 면접관 역할을 맡아주세요. 실제 면접처럼 한가지의 질문 혹은 요청을 합니다.
     사용자의 성별은 {gender}이며, 나이는 {age}입니다.
 첫시작은 안녕하세요 000지원자씨 면접 시작하겠습니다. 먼저 간단하게 자기소개 부탁드립니다. 라고 시작해.
@@ -82,6 +85,9 @@ def send_message_init():
 - 한국어로 질문하세요.
 - 서로 상호작용을 하며 면접이 이루어져야합니다. 한번 말할 때 한가지의 질문을 합니다."""
 
+
+
+
     # Assistant OpenAI API 호출
     # step 1. assistant 생성
     assistant = client.beta.assistants.create(
@@ -108,17 +114,6 @@ def send_message_init():
     )
 
     try:
-        # step 3. resume_url을 파일 검색 도구에 전달
-        # file_search_result = client.beta.tools.file_search.create(
-        #     thread_id=thread.id,
-        #     assistant_id=assistant.id,
-        #     file_path=file_path   # file_path PDF 파일 URL
-        # )
-        # if file_search_result['status'] != 'success':
-        #     return jsonify({"error": "Error extracting text from your file"}), 500
-        #
-        # file_text = file_search_result['content']  # 파일에서 추출된 텍스트
-
         assistant = client.beta.assistants.update(
             assistant_id=assistant.id,
             tool_resources={"file_search": {"vector_store_ids": [vector_store.id]}},
@@ -129,6 +124,7 @@ def send_message_init():
             content="안녕하세요. 질문 시작해 주세요."
             # 추가 instruction 첨부 가능
         )
+        print(message)
 
         # run 실행
         run = client.beta.threads.runs.create(
@@ -156,31 +152,34 @@ def send_message_init():
         # OpenAI의 응답을 클라이언트로 전달
         # { response : "생성한 응답 텍스트" }
 
-        # botResponse = TTSAPI(response)
-
+        botResponse = TTSAPI(response)
         # botResponse : audio(응답텍스트)
-        return jsonify("response : ", response)
-        # return send_file(
-        #     io.BytesIO(botResponse),  # 바이너리 음성 데이터
-        #     mimetype='audio/wav',  # 음성 파일 형식 지정
-        #     as_attachment=True,  # 다운로드로 처리
-        #     download_name='response_audio.wav'  # 다운로드될 파일 이름
-        # )
+        # return jsonify("botResponse : ", str(botResponse))
+        return send_file(
+            botResponse,
+            mimetype='audio/mpeg',  # 음성 파일 형식 지정(MP3)
+            as_attachment=False  # 다운로드가 아닌 단순 전송
+        )
 
     except requests.exceptions.RequestException as e:
-        print(e)
+        app.logger.error(f"Error processing request: {str(e)}")
         return jsonify({"error": "Error communicating with OpenAI API"}), 500
+
+    # finally:
+    #     # 파일 전송 후 삭제 (성공적으로 전송한 경우에도 삭제)
+    #     if os.path.exists(botResponse):
+    #         os.remove(botResponse)
+    #         print(f"File {botResponse} has been deleted.")
 
 @app.route('/send_message', methods=['POST'])
 # @token_required
 def send_message():
-    data = request.get_json()
+    data = request.form
 
     if not data:
         return jsonify({"error": "message is required"}), 400
 
     message = data.get('message')
-    # resume_url = data.get('resume_url')
 
     # 먼저 session에서 assistant와 thread를 가져오기
     assistant = session.get('assistant')
@@ -190,7 +189,7 @@ def send_message():
         return jsonify({"error": "Assistant and thread must be initialized first using /send_resume"}), 400
 
     try:
-        # step 3. thread에 resume 전송
+        # step 3. thread에 message 전송
         client.beta.threads.messages.create(
             thread_id=thread.id,
             role="user",
@@ -216,51 +215,41 @@ def send_message():
             thread_id=thread.id
         )
         response_data = messages.data[0]
+        print("OpenAI Response json: ", response_data)
         response = response_data.content[0].text.value
-        print(response)
+
         # OpenAI의 응답을 클라이언트로 전달
         # { response : "생성한 응답 텍스트" }
         botResponse = TTSAPI(response)
-        # botResponse : audio(응답텍스트)
-        return jsonify({"response_audio": botResponse})
+        return send_file(
+            botResponse,
+            mimetype='audio/mpeg',  # 음성 파일 형식 지정(MP3)
+            as_attachment=False  # 다운로드가 아닌 단순 전송
+        )
+
     except requests.exceptions.RequestException as e:
-        print(e)
+        app.logger.error(f"Error processing request: {str(e)}")
         return jsonify({"error": "Error communicating with OpenAI API"}), 500
 
 def TTSAPI(message):
     try:
-        # OpenAI TTS API 호출_이전버전
-        # response = requests.post(
-        #     TTS_API_URL,
-        #     headers={
-        #         "Authorization": f"Bearer {OPENAI_API_KEY}",
-        #         "Content-Type": "application/json"
-        #     },
-        #     json={
-        #         "model": "text-to-speech-1",
-        #         "text": message,
-        #         "voice": "alloy",
-        #         "language": "ko"
-        #     }
-        # )
-        speech_file_path = "speech.mp3"
+        # 타임스탬프를 이용하여 고유한 파일 이름 생성
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        speech_file_path = Path(__file__).parent / f"speech_{timestamp}.mp3"
         response = client.audio.speech.create(
             model="tts-1",
             voice="alloy",
-            input=message
+            input=message,
         )
-        io.BytesIO(response.content)
-        response.stream_to_file(speech_file_path)
-        # 오디오 데이터 반환
-        if response.status_code == 200:
-            return response.content  # 바이너리 오디오 데이터 반환
-        else:
-            raise Exception("status : ", response.status_code, "Failed to generate speech.")
+        # 스트리밍 방식으로 응답을 파일로 저장
+        with open(speech_file_path, 'wb') as f:
+            response.with_streaming_response(f.write)
+        return speech_file_path
 
     except requests.exceptions.RequestException as e:
-        print(f"Error: {e}")
+        print( f"Error: {e}")
         raise Exception("Error communicating with TTS API")
 
 if __name__ == '__main__':
     # 서버 실행
-    app.run(debug=True, port=3000)
+    app.run(debug=True,host = '0.0.0.0', port=3000)
