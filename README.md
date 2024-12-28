@@ -78,6 +78,7 @@ AI: 프롬프트 엔지니어링, Assistant와 chatcompletion ,login등 개별 �
 전지연 : backend
 
 
+
 소속: 성신여자대학교 
 
 
